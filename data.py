@@ -139,7 +139,7 @@ def get_train_val_loaders(dataset: str = "dft_3d",dataset_array=[],target: str =
     train_sample = filename + "_train.data"
     val_sample = filename + "_val.data"
     test_sample = filename + "_test.data"
-    if not os.path.exists(output_dir):
+    if output_dir is not None and not os.path.exists(output_dir):
         os.makedirs(output_dir)
     if (os.path.exists(train_sample) and os.path.exists(val_sample) and os.path.exists(test_sample) and save_dataloader):
         print("Loading DataLoader from saved file...")

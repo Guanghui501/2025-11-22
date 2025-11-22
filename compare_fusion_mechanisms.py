@@ -411,7 +411,8 @@ def main():
         n_val=None,
         n_test=None,
         batch_size=args.batch_size,
-        workers=0
+        workers=0,
+        output_dir=args.save_dir
     )
 
     print(f"   测试集样本数: {len(test_loader.dataset)}")
