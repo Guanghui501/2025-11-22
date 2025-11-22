@@ -64,6 +64,9 @@ class FusionComparator:
         features_dict = {
             'graph_base': [],
             'text_base': [],
+            'graph_middle': [],
+            'graph_fine': [],
+            'text_fine': [],
             'graph_cross': [],
             'text_cross': [],
             'graph_final': [],
@@ -113,14 +116,23 @@ class FusionComparator:
                 features_dict['graph_base'].append(output['graph_base'].cpu().numpy())
                 features_dict['text_base'].append(output['text_base'].cpu().numpy())
 
-                # 最终特征
-                features_dict['graph_final'].append(output['graph_features'].cpu().numpy())
-                features_dict['text_final'].append(output['text_features'].cpu().numpy())
+                # 中间融合后的特征（如果启用）
+                if has_middle and 'graph_middle' in output:
+                    features_dict['graph_middle'].append(output['graph_middle'].cpu().numpy())
+
+                # 细粒度注意力后的特征（如果启用）
+                if has_fine and 'graph_fine' in output:
+                    features_dict['graph_fine'].append(output['graph_fine'].cpu().numpy())
+                    features_dict['text_fine'].append(output['text_fine'].cpu().numpy())
 
                 # 全局注意力后的特征（如果启用）
                 if has_cross and 'graph_cross' in output:
                     features_dict['graph_cross'].append(output['graph_cross'].cpu().numpy())
                     features_dict['text_cross'].append(output['text_cross'].cpu().numpy())
+
+                # 最终特征
+                features_dict['graph_final'].append(output['graph_features'].cpu().numpy())
+                features_dict['text_final'].append(output['text_features'].cpu().numpy())
 
                 # 融合特征
                 fused = np.concatenate([
@@ -171,6 +183,18 @@ class FusionComparator:
         if 'text_base' in features_dict:
             feature_names.append('Text Base')
             feature_data.append(features_dict['text_base'])
+
+        if 'graph_middle' in features_dict:
+            feature_names.append('Graph + Middle Fusion')
+            feature_data.append(features_dict['graph_middle'])
+
+        if 'graph_fine' in features_dict:
+            feature_names.append('Graph + Fine-grained Attn')
+            feature_data.append(features_dict['graph_fine'])
+
+        if 'text_fine' in features_dict:
+            feature_names.append('Text + Fine-grained Attn')
+            feature_data.append(features_dict['text_fine'])
 
         if 'graph_cross' in features_dict:
             feature_names.append('Graph + Cross-Modal')

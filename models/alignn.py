@@ -902,6 +902,13 @@ class ALIGNN(nn.Module):
                 batch_num_nodes = g.batch_num_nodes().tolist()
                 x = self.middle_fusion_modules[f'layer_{idx}'](x, text_emb, batch_num_nodes)
 
+        # Save features after middle fusion (if requested for ablation studies)
+        graph_emb_after_middle = None
+        if return_intermediate_features and self.use_middle_fusion:
+            # Need to do readout + projection to get graph-level features
+            temp_graph_emb = self.readout(g, x)
+            graph_emb_after_middle = self.graph_projection(temp_graph_emb).clone()
+
         # gated GCN updates: update node, edge features
         for gcn_layer in self.gcn_layers:
             x, y = gcn_layer(g, x, y)
@@ -955,6 +962,19 @@ class ALIGNN(nn.Module):
 
             x = x_enhanced  # Use enhanced node features
 
+        # Save features after fine-grained attention (if requested for ablation studies)
+        graph_emb_after_fine = None
+        text_emb_after_fine = None
+        if return_intermediate_features and self.use_fine_grained_attention:
+            # Graph features after fine-grained attention
+            temp_graph_emb = self.readout(g, x)
+            graph_emb_after_fine = self.graph_projection(temp_graph_emb).clone()
+
+            # Text features after fine-grained attention
+            # Use the enhanced_tokens pooled representation
+            text_emb_after_fine = enhanced_tokens[:, 0, :]  # CLS token
+            text_emb_after_fine = self.text_projection(text_emb_after_fine).clone()
+
         # norm-activation-pool-classify
         graph_emb = self.readout(g, x)
         h = self.graph_projection(graph_emb)
@@ -1006,6 +1026,11 @@ class ALIGNN(nn.Module):
             if return_intermediate_features:
                 output_dict['graph_base'] = graph_emb_base
                 output_dict['text_base'] = text_emb_base
+                if self.use_middle_fusion and graph_emb_after_middle is not None:
+                    output_dict['graph_middle'] = graph_emb_after_middle
+                if self.use_fine_grained_attention and graph_emb_after_fine is not None:
+                    output_dict['graph_fine'] = graph_emb_after_fine
+                    output_dict['text_fine'] = text_emb_after_fine
                 if self.use_cross_modal_attention:
                     output_dict['graph_cross'] = enhanced_graph
                     output_dict['text_cross'] = enhanced_text
