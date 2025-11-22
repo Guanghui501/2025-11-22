@@ -336,6 +336,10 @@ def main():
                        help='无中期融合模型checkpoint')
     parser.add_argument('--root_dir', type=str, required=True,
                        help='数据目录')
+    parser.add_argument('--dataset', type=str, default='dft_3d',
+                       help='数据集类型（如 dft_3d, mp 等）')
+    parser.add_argument('--property', type=str, default='mbj_bandgap',
+                       help='属性名称（如 mbj_bandgap, formation_energy 等）')
     parser.add_argument('--save_dir', type=str, default='./attention_comparison',
                        help='保存目录')
     parser.add_argument('--num_samples', type=int, default=100,
@@ -352,81 +356,63 @@ def main():
         args.root_dir
     )
 
-    # 加载数据
-    print("加载数据...")
-    import pandas as pd
+    # 加载数据集（使用与 compare_fusion_mechanisms.py 相同的方法）
+    print(f"\n🔄 加载数据集: {args.dataset} - {args.property}")
+    try:
+        from train_with_cross_modal_attention import load_dataset, get_dataset_paths
 
-    # 直接从目录加载数据
-    cif_dir = os.path.join(args.root_dir, 'cif')
-    id_prop_file = os.path.join(args.root_dir, 'description.csv')
+        # 获取数据集路径
+        cif_dir, id_prop_file = get_dataset_paths(args.root_dir, args.dataset, args.property)
+        print(f"  数据文件: {id_prop_file}")
+        print(f"  结构目录: {cif_dir}")
 
-    if not os.path.exists(id_prop_file):
-        # 尝试其他可能的文件名
-        for name in ['id_prop.csv', 'data.csv', 'dataset.csv']:
-            alt_path = os.path.join(args.root_dir, name)
-            if os.path.exists(alt_path):
-                id_prop_file = alt_path
-                break
+        # 加载数据集
+        df = load_dataset(cif_dir, id_prop_file, args.dataset, args.property)
+        print(f"✅  加载数据集: {len(df)} 样本")
 
-    print(f"  数据文件: {id_prop_file}")
-    print(f"  结构目录: {cif_dir}")
+        # 如果设置了num_samples，且小于数据集大小，进行采样
+        if args.num_samples and len(df) > args.num_samples * 2:
+            print(f"⚠️  数据集较大，为加快速度随机采样 {args.num_samples * 2} 样本")
+            import random
+            random.seed(42)
+            df = random.sample(df, args.num_samples * 2)
 
-    # 读取数据
-    df = pd.read_csv(id_prop_file)
-    print(f"  样本数: {len(df)}")
+        # 创建数据加载器（使用user_data避免dataset限制）
+        train_loader, val_loader, test_loader, _ = get_train_val_loaders(
+            dataset='user_data',
+            dataset_array=df,
+            target='target',
+            n_train=None,
+            n_val=None,
+            n_test=None,
+            train_ratio=0.8,
+            val_ratio=0.1,
+            test_ratio=0.1,
+            batch_size=args.batch_size,
+            atom_features='cgcnn',
+            neighbor_strategy='k-nearest',
+            line_graph=True,
+            split_seed=42,
+            workers=0,
+            pin_memory=False,
+            save_dataloader=False,
+            filename='temp_attention_comparison',
+            id_tag='jid',
+            use_canonize=True,
+            cutoff=8.0,
+            max_neighbors=12,
+            output_dir=args.save_dir
+        )
 
-    # 构建数据集格式（JARVIS 兼容）
-    from jarvis.core.atoms import Atoms
-    dataset_array = []
+        print(f"   测试集样本数: {len(test_loader.dataset)}")
 
-    for idx, row in df.iterrows():
-        # CIF 文件路径
-        if 'File_Name' in df.columns:
-            cif_file = os.path.join(cif_dir, row['File_Name'].replace('.csv', '.cif'))
-        elif 'file' in df.columns:
-            cif_file = os.path.join(cif_dir, row['file'])
-        else:
-            cif_file = os.path.join(cif_dir, f"{row['Id']}.cif")
-
-        # 检查文件是否存在
-        if not os.path.exists(cif_file):
-            # 尝试直接用 Id
-            cif_file = os.path.join(cif_dir, f"{row['Id']}.cif")
-            if not os.path.exists(cif_file):
-                print(f"  警告: 找不到 CIF 文件 {cif_file}")
-                continue
-
-        # 读取晶体结构
-        try:
-            atoms = Atoms.from_cif(cif_file)
-        except Exception as e:
-            print(f"  警告: 无法读取 {cif_file}: {e}")
-            continue
-
-        # 描述文本
-        description = row.get('Description', '')
-
-        dataset_array.append({
-            'jid': str(row['Id']),  # JARVIS 使用 'jid' 作为 ID
-            'atoms': atoms,
-            'prop': float(row['prop']),
-            'description': description
-        })
-
-    print(f"  成功加载: {len(dataset_array)} 个样本")
-
-    # 使用与训练时相同的方式加载数据
-    train_loader, val_loader, test_loader = get_train_val_loaders(
-        dataset='dft_3d',  # JARVIS 数据集
-        dataset_array=dataset_array,
-        target='prop',
-        atom_features='cgcnn',
-        batch_size=args.batch_size,
-        split_seed=123,
-        output_dir=args.save_dir,
-        id_tag='id',
-        workers=0
-    )
+    except Exception as e:
+        print(f"❌  加载数据集失败: {e}")
+        print("请确保:")
+        print(f"  1. 数据集路径正确: {args.root_dir}")
+        print(f"  2. 数据集类型正确: {args.dataset}")
+        print(f"  3. 属性名称正确: {args.property}")
+        raise
 
     # 提取注意力权重
     results = comparator.extract_attention_weights(test_loader, args.num_samples)
