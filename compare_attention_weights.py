@@ -137,34 +137,35 @@ class AttentionComparator:
                 output_no_middle = self.model_no_middle(model_input, return_attention=True)
 
                 # 保存注意力权重
+                # 细粒度注意力
+                if 'fine_grained_attention_weights' in output_full:
+                    results['full_model']['fine_grained'].append(
+                        output_full['fine_grained_attention_weights'].cpu().numpy()
+                    )
+                    results['no_middle_model']['fine_grained'].append(
+                        output_no_middle['fine_grained_attention_weights'].cpu().numpy()
+                    )
+
+                # 全局注意力 (cross-modal attention)
                 if 'attention_weights' in output_full:
-                    attn_full = output_full['attention_weights']
-                    attn_no_middle = output_no_middle['attention_weights']
+                    results['full_model']['cross_modal'].append(
+                        output_full['attention_weights'].cpu().numpy()
+                    )
+                    results['no_middle_model']['cross_modal'].append(
+                        output_no_middle['attention_weights'].cpu().numpy()
+                    )
 
-                    # 细粒度注意力
-                    if 'fine_grained' in attn_full:
-                        results['full_model']['fine_grained'].append(
-                            attn_full['fine_grained'].cpu().numpy()
-                        )
-                        results['no_middle_model']['fine_grained'].append(
-                            attn_no_middle['fine_grained'].cpu().numpy()
-                        )
-
-                    # 全局注意力
-                    if 'cross_modal' in attn_full:
-                        results['full_model']['cross_modal'].append(
-                            attn_full['cross_modal'].cpu().numpy()
-                        )
-                        results['no_middle_model']['cross_modal'].append(
-                            attn_no_middle['cross_modal'].cpu().numpy()
-                        )
-
+                # 记录样本ID（只要有任何注意力权重）
+                if 'fine_grained_attention_weights' in output_full or 'attention_weights' in output_full:
                     results['full_model']['sample_ids'].extend(range(count, count + batch_size))
                     results['no_middle_model']['sample_ids'].extend(range(count, count + batch_size))
 
                 count += batch_size
 
-        print(f"✅ 提取完成：{count} 个样本\n")
+        print(f"✅ 提取完成：{count} 个样本")
+        print(f"  细粒度注意力: {len(results['full_model']['fine_grained'])} 批次")
+        print(f"  全局注意力: {len(results['full_model']['cross_modal'])} 批次\n")
+
         return results
 
     def compute_attention_statistics(self, attention_weights):
@@ -214,6 +215,11 @@ class AttentionComparator:
         print("生成可视化...")
 
         # 1. 细粒度注意力统计对比
+        if not results['full_model']['fine_grained']:
+            print("⚠️  警告：未找到细粒度注意力权重，无法生成可视化")
+            print("   请检查模型是否启用了 use_fine_grained_attention")
+            return
+
         if results['full_model']['fine_grained']:
             stats_full = self.compute_attention_statistics(
                 results['full_model']['fine_grained']
