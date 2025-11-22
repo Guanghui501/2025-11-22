@@ -354,18 +354,78 @@ def main():
 
     # 加载数据
     print("加载数据...")
-    # 这里需要根据你的实际数据加载方式调整
-    from train_with_cross_modal_attention import load_dataset, get_dataset_paths
+    import pandas as pd
 
-    cif_dir, id_prop_file = get_dataset_paths(args.root_dir, 'user_data', 'target')
-    dataset_array = load_dataset(cif_dir, id_prop_file, 'user_data', 'target')
+    # 直接从目录加载数据
+    cif_dir = os.path.join(args.root_dir, 'cif')
+    id_prop_file = os.path.join(args.root_dir, 'description.csv')
 
+    if not os.path.exists(id_prop_file):
+        # 尝试其他可能的文件名
+        for name in ['id_prop.csv', 'data.csv', 'dataset.csv']:
+            alt_path = os.path.join(args.root_dir, name)
+            if os.path.exists(alt_path):
+                id_prop_file = alt_path
+                break
+
+    print(f"  数据文件: {id_prop_file}")
+    print(f"  结构目录: {cif_dir}")
+
+    # 读取数据
+    df = pd.read_csv(id_prop_file)
+    print(f"  样本数: {len(df)}")
+
+    # 构建数据集格式（JARVIS 兼容）
+    from jarvis.core.atoms import Atoms
+    dataset_array = []
+
+    for idx, row in df.iterrows():
+        # CIF 文件路径
+        if 'File_Name' in df.columns:
+            cif_file = os.path.join(cif_dir, row['File_Name'].replace('.csv', '.cif'))
+        elif 'file' in df.columns:
+            cif_file = os.path.join(cif_dir, row['file'])
+        else:
+            cif_file = os.path.join(cif_dir, f"{row['Id']}.cif")
+
+        # 检查文件是否存在
+        if not os.path.exists(cif_file):
+            # 尝试直接用 Id
+            cif_file = os.path.join(cif_dir, f"{row['Id']}.cif")
+            if not os.path.exists(cif_file):
+                print(f"  警告: 找不到 CIF 文件 {cif_file}")
+                continue
+
+        # 读取晶体结构
+        try:
+            atoms = Atoms.from_cif(cif_file)
+        except Exception as e:
+            print(f"  警告: 无法读取 {cif_file}: {e}")
+            continue
+
+        # 描述文本
+        description = row.get('Description', '')
+
+        dataset_array.append({
+            'jid': str(row['Id']),  # JARVIS 使用 'jid' 作为 ID
+            'atoms': atoms,
+            'prop': float(row['prop']),
+            'description': description
+        })
+
+    print(f"  成功加载: {len(dataset_array)} 个样本")
+
+    # 使用与训练时相同的方式加载数据
     train_loader, val_loader, test_loader = get_train_val_loaders(
-        dataset='user_data',
+        dataset='dft_3d',  # JARVIS 数据集
         dataset_array=dataset_array,
-        target='target',
+        target='prop',
+        atom_features='cgcnn',
         batch_size=args.batch_size,
-        split_seed=123
+        split_seed=123,
+        output_dir=args.save_dir,
+        id_tag='id',
+        workers=0
     )
 
     # 提取注意力权重
