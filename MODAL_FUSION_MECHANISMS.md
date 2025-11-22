@@ -70,76 +70,7 @@ text_emb = self.text_projection(cls_emb)
 
 ---
 
-## 2️⃣ 对比学习机制 (Contrastive Loss)
-
-**启用条件**: `config.use_contrastive_loss = True`
-**位置**: `alignn.py:69-118`, `alignn.py:1008-1012`
-
-### 作用机制
-
-```python
-class ContrastiveLoss(nn.Module):
-    def forward(self, graph_features, text_features):
-        # 1. L2归一化：将特征投影到单位超球面
-        graph_features = F.normalize(graph_features, dim=1)  # [batch, 64]
-        text_features = F.normalize(text_features, dim=1)    # [batch, 64]
-
-        # 2. 计算相似度矩阵 [batch, batch]
-        similarity_matrix = (graph_features @ text_features.T) / temperature
-
-        # 3. 对比学习损失（双向）
-        labels = torch.arange(batch_size)  # 对角线为正样本
-        loss_g2t = CrossEntropy(similarity_matrix, labels)    # 图找文本
-        loss_t2g = CrossEntropy(similarity_matrix.T, labels)  # 文本找图
-
-        return (loss_g2t + loss_t2g) / 2
-```
-
-### 特征变化
-
-**对图特征的影响**:
-```
-原始图特征 [batch, 64]
-    ↓ L2归一化
-归一化图特征 [batch, 64] (单位向量)
-    ↓ 对比损失梯度
-图特征被拉向对应的文本特征，远离不对应的文本
-```
-
-**对文本特征的影响**:
-```
-原始文本特征 [batch, 64]
-    ↓ L2归一化
-归一化文本特征 [batch, 64] (单位向量)
-    ↓ 对比损失梯度
-文本特征被拉向对应的图特征，远离不对应的图
-```
-
-### 效果示意
-
-假设批次大小为3，包含 (图1,文本1), (图2,文本2), (图3,文本3)
-
-**相似度矩阵** (训练后期望状态):
-```
-           文本1  文本2  文本3
-图1    →   [高]   低    低     ← 正样本对齐
-图2    →    低   [高]   低     ← 正样本对齐
-图3    →    低    低   [高]    ← 正样本对齐
-```
-
-**核心效果**:
-- 🎯 **拉近**: 对应的图-文本对在特征空间中距离更近
-- 🚫 **推远**: 不对应的图-文本对距离更远
-- 📐 **对齐**: 两个模态在同一特征空间中语义对齐
-- ⚠️ **不改变特征维度**: 仍然是 `[batch, 64]`，但特征分布更有结构
-
-**可视化影响**:
-- 在 t-SNE/UMAP 可视化中，对应的图-文本对会聚集在一起
-- 不同材料的图-文本簇会更加分离
-
----
-
-## 3️⃣ 中间融合机制 (Middle Fusion)
+## 2️⃣ 中间融合机制 (Middle Fusion)
 
 **启用条件**: `config.use_middle_fusion = True`
 **位置**: `alignn.py:121-218`, `alignn.py:896-899`
@@ -234,7 +165,7 @@ Si原子: gate=0.2 → 弱接受（文本未提及）
 
 ---
 
-## 4️⃣ 细粒度跨模态注意力 (Fine-grained Cross-modal Attention)
+## 3️⃣ 细粒度跨模态注意力 (Fine-grained Cross-modal Attention)
 
 **启用条件**: `config.use_fine_grained_attention = True`
 **位置**: `alignn.py:352-528`, `alignn.py:905-952`
@@ -360,7 +291,7 @@ stability  0.15  0.2  0.2  0.15 ...
 
 ---
 
-## 5️⃣ 全局跨模态注意力 (Cross-modal Attention)
+## 4️⃣ 全局跨模态注意力 (Cross-modal Attention)
 
 **启用条件**: `config.use_cross_modal_attention = True`
 **位置**: `alignn.py:221-349`, `alignn.py:960-971`
@@ -494,11 +425,10 @@ attn_t2g: [batch, heads, 1, 1]  # 文本对图的关注度（接近1.0）
 
 ---
 
-## 🎯 各机制对比总结
+## 🎯 三大机制对比总结
 
 | 机制 | 融合时机 | 融合粒度 | 方向 | 特征维度变化 | 主要作用 |
 |-----|---------|---------|-----|-------------|---------|
-| **对比学习** | 训练时（损失函数） | 全局 | 双向 | ❌ 不变 | 语义空间对齐 |
 | **中间融合** | ALIGNN层内 | 原子级 | 单向(文→图) | ❌ 不变 | 文本调制图编码 |
 | **细粒度注意力** | 图编码后 | 原子-词级 | 双向 | ❌ 不变 | 精细语义对齐 |
 | **全局注意力** | 最终融合 | 全局 | 双向 | ❌ 不变 | 全局信息融合 |
@@ -515,12 +445,6 @@ attn_t2g: [batch, heads, 1, 1]  # 文本对图的关注度（接近1.0）
            (两个独立空间)
 ```
 
-### 对比学习后
-```
-对齐空间:   ●○  ●○  ●○  ●○  ●○
-          (对应的图-文本对靠近)
-```
-
 ### 中间融合后
 ```
 文本→图:    ●' ●' ●' ●' ●'
@@ -531,9 +455,9 @@ attn_t2g: [batch, heads, 1, 1]  # 文本对图的关注度（接近1.0）
 
 ### 细粒度注意力后
 ```
-互相增强:   ●' ●' ●' ●' ●'
-            ↕️ 双向增强
-            ○' ○' ○' ○' ○'
+互相增强:   ●" ●" ●" ●" ●"
+            ↕️  ↕️  ↕️  ↕️
+            ○" ○" ○" ○"
 ```
 
 ### 全局注意力后
@@ -548,30 +472,28 @@ attn_t2g: [batch, heads, 1, 1]  # 文本对图的关注度（接近1.0）
 
 ### 选择融合策略
 
-1. **只要基础对齐**:
-   - 启用: `use_contrastive_loss=True`
-   - 适合: 预训练、特征提取
-
-2. **需要文本引导图编码**:
+1. **需要文本引导图编码**:
    - 启用: `use_middle_fusion=True`
    - 适合: 文本描述对结构理解很重要的任务
 
-3. **需要可解释性**:
+2. **需要可解释性**:
    - 启用: `use_fine_grained_attention=True`
    - 适合: 需要知道哪些原子对应哪些词
 
-4. **最大融合效果**:
-   - 同时启用多个机制
+3. **最大融合效果**:
+   - 同时启用所有三个机制
    - 适合: 复杂的多模态推理任务
 
 ---
 
 ## 📝 代码位置索引
 
-- **对比学习**: `alignn.py:69-118`, `1008-1012`
-- **中间融合**: `alignn.py:121-218`, `896-899`
-- **细粒度注意力**: `alignn.py:352-528`, `905-952`
-- **全局注意力**: `alignn.py:221-349`, `960-971`
+- **中间融合定义**: `alignn.py:121-218`
+- **中间融合应用**: `alignn.py:896-899`
+- **细粒度注意力定义**: `alignn.py:352-528`
+- **细粒度注意力应用**: `alignn.py:905-952`
+- **全局注意力定义**: `alignn.py:221-349`
+- **全局注意力应用**: `alignn.py:960-971`
 - **特征提取**: `visualize_latent_space.py:57-157`
 
 ---

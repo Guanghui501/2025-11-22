@@ -2,11 +2,12 @@
 """
 可视化多模态融合机制的特征流程
 生成融合机制的流程图和特征维度变化图
+移除了对比学习部分，只保留三大融合机制
 """
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+from matplotlib.patches import FancyBboxPatch
 import numpy as np
 
 plt.rcParams['font.family'] = 'DejaVu Sans'
@@ -14,7 +15,7 @@ plt.rcParams['font.size'] = 9
 
 
 def draw_fusion_timeline():
-    """绘制融合机制的时间线"""
+    """绘制融合机制的时间线（移除对比学习）"""
     fig, ax = plt.subplots(figsize=(16, 10))
     ax.set_xlim(0, 10)
     ax.set_ylim(0, 12)
@@ -166,23 +167,6 @@ def draw_fusion_timeline():
     ax.annotate('', xy=(9.5, 9.0), xytext=(8.6, 8.7),
                 arrowprops=dict(arrowstyle='->', lw=2, color='#E76F51'))
 
-    # ==================== 对比学习（底部）====================
-    contrast_box = FancyBboxPatch((3.5, 1.5), 3.0, 1.2, boxstyle="round,pad=0.1",
-                                  facecolor='#FFE5B4', edgecolor='#DAA520', linewidth=2)
-    ax.add_patch(contrast_box)
-    ax.text(5.0, 2.4, 'Contrastive Learning Loss', ha='center', fontsize=10, weight='bold')
-    ax.text(5.0, 2.0, 'Align graph and text in feature space', ha='center', fontsize=8)
-    ax.text(5.0, 1.7, '(Training time only, affects feature distribution)', ha='center',
-            fontsize=7, style='italic')
-
-    # 对比学习连接
-    ax.annotate('', xy=(5.0, 1.5), xytext=(6.65, 8.8),
-                arrowprops=dict(arrowstyle='<->', lw=1.5, color='#DAA520',
-                               linestyle='dotted', alpha=0.6))
-    ax.annotate('', xy=(5.0, 1.5), xytext=(1.9, 5.3),
-                arrowprops=dict(arrowstyle='<->', lw=1.5, color='#DAA520',
-                               linestyle='dotted', alpha=0.6))
-
     # ==================== 图例 ====================
     legend_y = 0.5
 
@@ -198,12 +182,9 @@ def draw_fusion_timeline():
     # 最终预测
     final_patch = mpatches.Patch(facecolor='#6A4C93', edgecolor='#553285',
                                  linewidth=2, label='Final Prediction')
-    # 对比学习
-    contrast_patch = mpatches.Patch(facecolor='#FFE5B4', edgecolor='#DAA520',
-                                    linewidth=2, label='Contrastive Learning')
 
-    ax.legend(handles=[graph_patch, text_patch, fusion_patch, final_patch, contrast_patch],
-              loc='lower left', fontsize=8, ncol=5)
+    ax.legend(handles=[graph_patch, text_patch, fusion_patch, final_patch],
+              loc='lower left', fontsize=8, ncol=4)
 
     # 添加注释
     ax.text(5.0, 0.2, 'N: total atoms | B: batch size | L: sequence length | M: max atoms',
@@ -217,23 +198,13 @@ def draw_fusion_timeline():
 
 
 def draw_feature_dimensions():
-    """绘制特征维度变化图"""
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    """绘制特征维度变化图（移除对比学习）"""
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
 
     mechanisms = [
         {
-            'title': '1. Contrastive Learning',
-            'ax': axes[0, 0],
-            'stages': ['Original\nGraph', 'L2 Norm', 'After\nContrastive'],
-            'graph_dims': [64, 64, 64],
-            'text_dims': [64, 64, 64],
-            'graph_color': ['#A8DADC', '#7FB3D5', '#5499C7'],
-            'text_color': ['#FFDAB9', '#FFCBA4', '#FFAC86'],
-            'effect': 'Aligns features in\nsemantic space'
-        },
-        {
-            'title': '2. Middle Fusion',
-            'ax': axes[0, 1],
+            'title': '1. Middle Fusion',
+            'ax': axes[0],
             'stages': ['ALIGNN\nLayer 1', 'Middle\nFusion', 'ALIGNN\nLayer 3'],
             'graph_dims': [256, 256, 256],
             'text_dims': [None, 64, None],
@@ -242,8 +213,8 @@ def draw_feature_dimensions():
             'effect': 'Text modulates\ngraph encoding'
         },
         {
-            'title': '3. Fine-grained Attention',
-            'ax': axes[1, 0],
+            'title': '2. Fine-grained Attention',
+            'ax': axes[1],
             'stages': ['Node Feat\n[B,M,256]', 'Attention', 'Enhanced\nNodes'],
             'graph_dims': [256, 256, 256],
             'text_dims': [768, 768, 768],
@@ -252,8 +223,8 @@ def draw_feature_dimensions():
             'effect': 'Atom-token level\nbidirectional fusion'
         },
         {
-            'title': '4. Global Cross-modal Attention',
-            'ax': axes[1, 1],
+            'title': '3. Global Cross-modal Attention',
+            'ax': axes[2],
             'stages': ['Graph\nProj', 'Attention', 'Fusion'],
             'graph_dims': [64, 64, 64],
             'text_dims': [64, 64, 64],
@@ -306,7 +277,7 @@ def draw_feature_dimensions():
                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
 
     plt.suptitle('Feature Dimension Changes in Different Fusion Mechanisms',
-                fontsize=14, weight='bold', y=0.98)
+                fontsize=14, weight='bold', y=1.02)
     plt.tight_layout()
     plt.savefig('feature_dimensions_comparison.pdf', dpi=300, bbox_inches='tight')
     plt.savefig('feature_dimensions_comparison.png', dpi=300, bbox_inches='tight')
@@ -407,3 +378,4 @@ if __name__ == '__main__':
     print("  - fusion_mechanisms_timeline.pdf/png")
     print("  - feature_dimensions_comparison.pdf/png")
     print("  - attention_heatmap_example.pdf/png")
+    print("\n说明: 已移除对比学习相关内容，只保留三大融合机制")
