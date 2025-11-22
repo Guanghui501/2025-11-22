@@ -155,13 +155,21 @@ class AttentionComparator:
                         attn_no_middle.cpu().numpy()
                     )
 
-                # 全局注意力 (cross-modal attention)
+                # 全局注意力 (cross-modal attention，也是一个字典)
                 if 'attention_weights' in output_full:
+                    # 使用 graph_to_text 注意力: [batch, heads, 1, 1]
+                    attn_full = output_full['attention_weights']['graph_to_text']
+                    attn_no_middle = output_no_middle['attention_weights']['graph_to_text']
+
+                    # 对多头注意力取平均: [batch, heads, 1, 1] -> [batch, 1, 1]
+                    attn_full = attn_full.mean(dim=1)
+                    attn_no_middle = attn_no_middle.mean(dim=1)
+
                     results['full_model']['cross_modal'].append(
-                        output_full['attention_weights'].cpu().numpy()
+                        attn_full.cpu().numpy()
                     )
                     results['no_middle_model']['cross_modal'].append(
-                        output_no_middle['attention_weights'].cpu().numpy()
+                        attn_no_middle.cpu().numpy()
                     )
 
                 # 记录样本ID（只要有任何注意力权重）
