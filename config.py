@@ -14,7 +14,15 @@ from models.gcn import SimpleGCNConfig
 from models.densegcn import DenseGCNConfig
 from models.alignn import ALIGNNConfig
 from models.dense_alignn import DenseALIGNNConfig
-from models.alignn_cgcnn import ACGCNNConfig
+
+# Optional import - may fail if dependencies not installed
+try:
+    from models.alignn_cgcnn import ACGCNNConfig
+    HAS_ACGCNN = True
+except (ImportError, ModuleNotFoundError):
+    ACGCNNConfig = None
+    HAS_ACGCNN = False
+
 from models.alignn_layernorm import ALIGNNConfig as ALIGNN_LN_Config
 
 # from typing import List
@@ -207,16 +215,28 @@ class TrainingConfig(BaseSettings):
     # embedding_features: int=64
 
     # model configuration
-    model: Union[
-        CGCNNConfig,
-        ICGCNNConfig,
-        SimpleGCNConfig,
-        DenseGCNConfig,
-        ALIGNNConfig,
-        ALIGNN_LN_Config,
-        DenseALIGNNConfig,
-        ACGCNNConfig,
-    ] = ALIGNNConfig(name="alignn")
+    # Build model config union based on available imports
+    if HAS_ACGCNN:
+        model: Union[
+            CGCNNConfig,
+            ICGCNNConfig,
+            SimpleGCNConfig,
+            DenseGCNConfig,
+            ALIGNNConfig,
+            ALIGNN_LN_Config,
+            DenseALIGNNConfig,
+            ACGCNNConfig,
+        ] = ALIGNNConfig(name="alignn")
+    else:
+        model: Union[
+            CGCNNConfig,
+            ICGCNNConfig,
+            SimpleGCNConfig,
+            DenseGCNConfig,
+            ALIGNNConfig,
+            ALIGNN_LN_Config,
+            DenseALIGNNConfig,
+        ] = ALIGNNConfig(name="alignn")
     # ] = CGCNNConfig(name="cgcnn")
 
     @root_validator()
