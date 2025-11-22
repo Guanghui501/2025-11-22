@@ -34,7 +34,7 @@ def load_model_with_fine_grained_attention(checkpoint_path, device='cuda'):
     """Load model with fine-grained attention enabled."""
 
     # Load checkpoint
-    checkpoint = torch.load(checkpoint_path, map_location=device)
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
 
     # Create config with fine-grained attention enabled
     config = ALIGNNConfig(

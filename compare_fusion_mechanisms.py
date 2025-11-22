@@ -380,7 +380,7 @@ def main():
 
     # 加载模型
     print(f"🔄 加载模型: {args.checkpoint}")
-    checkpoint = torch.load(args.checkpoint, map_location='cpu')
+    checkpoint = torch.load(args.checkpoint, map_location='cpu', weights_only=False)
 
     if 'config' in checkpoint:
         config = checkpoint['config']
