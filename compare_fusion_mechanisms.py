@@ -221,6 +221,27 @@ class FusionComparator:
             print("⚠️  没有可视化的特征!")
             return
 
+        # 先对所有特征进行t-SNE，收集所有坐标用于统一坐标轴范围
+        print("   第一步: 计算所有t-SNE嵌入...")
+        all_features_2d = []
+        for name, features in zip(feature_names, feature_data):
+            tsne = TSNE(n_components=2, random_state=42, perplexity=30)
+            features_2d = tsne.fit_transform(features)
+            all_features_2d.append(features_2d)
+
+        # 计算全局坐标范围
+        all_coords = np.vstack(all_features_2d)
+        x_min, x_max = all_coords[:, 0].min(), all_coords[:, 0].max()
+        y_min, y_max = all_coords[:, 1].min(), all_coords[:, 1].max()
+
+        # 添加边距
+        x_margin = (x_max - x_min) * 0.05
+        y_margin = (y_max - y_min) * 0.05
+        x_lim = [x_min - x_margin, x_max + x_margin]
+        y_lim = [y_min - y_margin, y_max + y_margin]
+
+        print(f"   全局坐标范围: x=[{x_lim[0]:.1f}, {x_lim[1]:.1f}], y=[{y_lim[0]:.1f}, {y_lim[1]:.1f}]")
+
         # 创建网格布局
         n_cols = min(3, n_features)
         n_rows = (n_features + n_cols - 1) // n_cols
@@ -230,18 +251,23 @@ class FusionComparator:
         else:
             axes = axes.flatten() if n_features > 1 else [axes]
 
-        # 对每个特征进行t-SNE
-        for idx, (name, features) in enumerate(zip(feature_names, feature_data)):
-            print(f"   处理 {name}...")
-            tsne = TSNE(n_components=2, random_state=42, perplexity=30)
-            features_2d = tsne.fit_transform(features)
-
+        # 第二步: 绘制每个特征
+        print("   第二步: 绘制可视化...")
+        for idx, (name, features_2d) in enumerate(zip(feature_names, all_features_2d)):
             ax = axes[idx]
             scatter = ax.scatter(features_2d[:, 0], features_2d[:, 1],
                                 c=targets, cmap='viridis', alpha=0.6, s=20)
             ax.set_title(name, fontsize=12, fontweight='bold')
             ax.set_xlabel('t-SNE 1')
             ax.set_ylabel('t-SNE 2')
+
+            # 设置统一的坐标范围
+            ax.set_xlim(x_lim)
+            ax.set_ylim(y_lim)
+
+            # 设置白色网格线
+            ax.grid(True, color='white', linewidth=0.8, alpha=0.7)
+
             plt.colorbar(scatter, ax=ax, label='Target Value')
 
         # 隐藏多余的子图
