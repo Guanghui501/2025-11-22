@@ -836,17 +836,19 @@ class ALIGNN(nn.Module):
             self.link = torch.sigmoid
 
     def forward(self, g: Union[Tuple[dgl.DGLGraph, dgl.DGLGraph], dgl.DGLGraph],
-               return_features=False, return_attention=False):
+               return_features=False, return_attention=False, return_intermediate_features=False):
         """ALIGNN : start with `atom_features`.
 
         Args:
             g: Graph(s) and text input
             return_features: If True, return dict with predictions and intermediate features
             return_attention: If True, include attention weights in returned dict (for interpretability)
+            return_intermediate_features: If True, return features at each fusion stage (for ablation studies)
 
         Returns:
             If return_features=False: predictions [batch_size]
             If return_features=True or return_attention=True: dict with predictions and features/attention
+            If return_intermediate_features=True: dict with features at each fusion stage
 
         x: atom features (g.ndata)
         y: bond features (g.edata and lg.ndata)
@@ -879,6 +881,8 @@ class ALIGNN(nn.Module):
         cls_emb = last_hidden_state[:, 0, :]  # [batch, 768]
         text_emb = self.text_projection(cls_emb)  # [batch, 64]
 
+        # Store base text features for ablation studies
+        text_emb_base = text_emb.clone() if return_intermediate_features else None
 
         # initial node features: atom feature network...
         x = g.ndata.pop("atom_features")
@@ -955,6 +959,9 @@ class ALIGNN(nn.Module):
         graph_emb = self.readout(g, x)
         h = self.graph_projection(graph_emb)
 
+        # Store base graph features for ablation studies
+        graph_emb_base = h.clone() if return_intermediate_features else None
+
         # Multi-Modal Representation Fusion
         attention_weights = None
         if self.use_cross_modal_attention:
@@ -988,12 +995,20 @@ class ALIGNN(nn.Module):
         predictions = torch.squeeze(out)
 
         # Return intermediate features if requested (for contrastive learning or interpretability)
-        if return_features or self.use_contrastive_loss or return_attention:
+        if return_features or self.use_contrastive_loss or return_attention or return_intermediate_features:
             output_dict = {
                 'predictions': predictions,
                 'graph_features': h if not self.use_cross_modal_attention else enhanced_graph,
                 'text_features': text_emb if not self.use_cross_modal_attention else enhanced_text,
             }
+
+            # Add intermediate features for ablation studies
+            if return_intermediate_features:
+                output_dict['graph_base'] = graph_emb_base
+                output_dict['text_base'] = text_emb_base
+                if self.use_cross_modal_attention:
+                    output_dict['graph_cross'] = enhanced_graph
+                    output_dict['text_cross'] = enhanced_text
 
             # Add attention weights if requested (for interpretability)
             if return_attention:
@@ -1011,6 +1026,6 @@ class ALIGNN(nn.Module):
                 contrastive_loss = self.contrastive_loss_fn(graph_feat, text_feat)
                 output_dict['contrastive_loss'] = contrastive_loss
 
-            return output_dict if return_features or return_attention or (self.use_contrastive_loss and self.training) else predictions
+            return output_dict if return_features or return_attention or return_intermediate_features or (self.use_contrastive_loss and self.training) else predictions
 
         return predictions
