@@ -551,6 +551,10 @@ class ALIGNNConfig(BaseSettings):
     cross_modal_hidden_dim: int = 256
     cross_modal_num_heads: int = 4
     cross_modal_dropout: float = 0.1
+    cross_attention_use_text_fine: bool = False  # If True, use text_fine instead of text_base (Proposal D)
+
+    # Text-fine gate fusion settings (Proposal C)
+    use_text_fine_gate_fusion: bool = False  # If True, use text_fine to gate-modulate graph_emb before cross-attention
 
     # Fine-grained attention settings (NEW!)
     use_fine_grained_attention: bool = False  # Enable fine-grained atom-token attention
@@ -798,8 +802,20 @@ class ALIGNN(nn.Module):
                 use_projection=config.fine_grained_use_projection
             )
 
+        # Text-fine gate fusion (Proposal C): use text_fine to modulate graph_emb
+        self.use_text_fine_gate_fusion = config.use_text_fine_gate_fusion
+        if self.use_text_fine_gate_fusion and config.use_fine_grained_attention:
+            # Gate network: learns how to use text_fine to modulate graph features
+            self.text_fine_gate = nn.Sequential(
+                nn.Linear(64, 64),  # text_fine is 64-dim after projection
+                nn.ReLU(),
+                nn.Linear(64, 64),
+                nn.Sigmoid()  # Output gate values [0, 1]
+            )
+
         # Cross-modal attention module (global level, for backward compatibility)
         self.use_cross_modal_attention = config.use_cross_modal_attention
+        self.cross_attention_use_text_fine = config.cross_attention_use_text_fine
         if self.use_cross_modal_attention:
             self.cross_modal_attention = CrossModalAttention(
                 graph_dim=64,  # After graph_projection
@@ -988,17 +1004,26 @@ class ALIGNN(nn.Module):
         # Note: graph_emb_base was already saved earlier (before fine-grained attention)
         # to ensure it captures true "base" features without any attention applied
 
+        # Proposal C: Text-fine gate fusion (before cross-modal attention)
+        # Use high-quality text_fine to modulate graph features
+        if self.use_text_fine_gate_fusion and self.use_fine_grained_attention and enhanced_tokens is not None:
+            text_fine = enhanced_tokens[:, 0, :]  # CLS token after fine-grained attention
+            text_fine_projected = self.text_projection(text_fine)
+
+            # Gate modulation: h_enhanced = h * gate(text_fine)
+            gate = self.text_fine_gate(text_fine_projected)  # [batch, 64], values in [0, 1]
+            h = h * gate  # Element-wise modulation
+
         # Multi-Modal Representation Fusion
         attention_weights = None
         if self.use_cross_modal_attention:
-            # Use enhanced text features for cross-modal attention if available
-            # This leverages the high-quality text_fine features from fine-grained attention
-            if self.use_fine_grained_attention and enhanced_tokens is not None:
-                # Use text_fine (enhanced by fine-grained attention) instead of text_base
+            # Decide which text features to use for cross-modal attention
+            if self.cross_attention_use_text_fine and self.use_fine_grained_attention and enhanced_tokens is not None:
+                # Proposal D: Use text_fine (enhanced by fine-grained attention) instead of text_base
                 text_for_cross_attention = enhanced_tokens[:, 0, :]  # CLS token after fine-grained attention
                 text_for_cross_attention = self.text_projection(text_for_cross_attention)
             else:
-                # Fall back to base text features if fine-grained attention is not used
+                # Default: Use base text features
                 text_for_cross_attention = text_emb
 
             # Cross-modal attention fusion

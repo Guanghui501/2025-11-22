@@ -134,6 +134,10 @@ def get_parser():
                         help='跨模态注意力头数')
     parser.add_argument('--cross_modal_dropout', type=float, default=0.1,
                         help='跨模态注意力dropout率')
+    parser.add_argument('--cross_attention_use_text_fine', type=str2bool, default=False,
+                        help='全局注意力是否使用 text_fine（方案 D）。如果为 False，使用 text_base')
+    parser.add_argument('--use_text_fine_gate_fusion', type=str2bool, default=False,
+                        help='是否在全局注意力前用 text_fine 门控调制 graph（方案 C）')
 
     # 中期融合参数
     parser.add_argument('--use_middle_fusion', type=str2bool, default=False,
@@ -467,6 +471,8 @@ def create_config(args):
         cross_modal_hidden_dim=args.cross_modal_hidden_dim,
         cross_modal_num_heads=args.cross_modal_num_heads,
         cross_modal_dropout=args.cross_modal_dropout,
+        cross_attention_use_text_fine=args.cross_attention_use_text_fine,
+        use_text_fine_gate_fusion=args.use_text_fine_gate_fusion,
         # 中期融合配置
         use_middle_fusion=args.use_middle_fusion,
         middle_fusion_layers=args.middle_fusion_layers,
@@ -586,6 +592,12 @@ def main():
         print(f"  隐藏维度: {args.cross_modal_hidden_dim}")
         print(f"  注意力头数: {args.cross_modal_num_heads}")
         print(f"  Dropout率: {args.cross_modal_dropout}")
+        print(f"  使用 text_fine（方案 D）: {args.cross_attention_use_text_fine}")
+
+    print(f"\nText-fine 门控融合配置（方案 C）:")
+    print(f"  启用: {args.use_text_fine_gate_fusion}")
+    if args.use_text_fine_gate_fusion:
+        print(f"  说明: 使用 text_fine 门控调制 graph_emb，然后传入全局注意力")
 
     print(f"\n中期融合配置:")
     print(f"  启用: {args.use_middle_fusion}")
