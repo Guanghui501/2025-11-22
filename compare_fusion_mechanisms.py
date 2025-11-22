@@ -366,7 +366,9 @@ class FusionComparator:
 def main():
     parser = argparse.ArgumentParser(description='对比不同融合机制的效果 (v2)')
     parser.add_argument('--checkpoint', type=str, required=True, help='模型checkpoint路径')
-    parser.add_argument('--dataset', type=str, default='jarvis', help='数据集名称')
+    parser.add_argument('--dataset', type=str, default='dft_3d',
+                        choices=['dft_3d', 'dft_2d', 'megnet', 'cfid_3d', 'qm9_std_jctc'],
+                        help='JARVIS数据集名称 (默认: dft_3d)')
     parser.add_argument('--property', type=str, default='formation_energy_peratom',
                         help='目标属性')
     parser.add_argument('--batch_size', type=int, default=32, help='批次大小')
