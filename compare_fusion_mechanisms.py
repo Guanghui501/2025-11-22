@@ -15,8 +15,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
 from sklearn.manifold import TSNE
-from sklearn.metrics import silhouette_score, davies_bouldin_score
+from sklearn.metrics import silhouette_score, davies_bouldin_score, r2_score, mean_absolute_error, mean_squared_error
 from sklearn.metrics.pairwise import cosine_similarity
+from scipy.stats import pearsonr, spearmanr
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -412,6 +413,129 @@ class FusionComparator:
         print(f"✅ 指标对比图已保存: {save_path}")
         plt.close()
 
+    def compute_regression_metrics(self, features_dict, targets, save_dir):
+        """计算回归任务的特征质量指标"""
+        print("\n📊 计算回归任务指标...")
+
+        metrics_list = []
+
+        for name, features in features_dict.items():
+            if features is None or len(features) == 0:
+                continue
+
+            print(f"   分析 {name}...")
+
+            # 1. 特征-目标相关性 (Pearson)
+            feature_dim = features.shape[1]
+            pearson_correlations = []
+            for i in range(feature_dim):
+                try:
+                    corr, _ = pearsonr(features[:, i], targets)
+                    if not np.isnan(corr):
+                        pearson_correlations.append(abs(corr))
+                except:
+                    pass
+
+            avg_pearson = np.mean(pearson_correlations) if len(pearson_correlations) > 0 else 0.0
+            max_pearson = np.max(pearson_correlations) if len(pearson_correlations) > 0 else 0.0
+
+            # 2. 特征-目标相关性 (Spearman)
+            spearman_correlations = []
+            for i in range(feature_dim):
+                try:
+                    corr, _ = spearmanr(features[:, i], targets)
+                    if not np.isnan(corr):
+                        spearman_correlations.append(abs(corr))
+                except:
+                    pass
+
+            avg_spearman = np.mean(spearman_correlations) if len(spearman_correlations) > 0 else 0.0
+
+            # 3. 特征方差 (表示特征的表达能力)
+            feature_variance = np.mean(np.var(features, axis=0))
+
+            # 4. 特征标准差
+            feature_std = np.mean(np.std(features, axis=0))
+
+            # 5. 特征范数
+            feature_norm = np.mean(np.linalg.norm(features, axis=1))
+
+            metrics_list.append({
+                'Feature': name,
+                'Avg Pearson Corr': avg_pearson,
+                'Max Pearson Corr': max_pearson,
+                'Avg Spearman Corr': avg_spearman,
+                'Feature Variance': feature_variance,
+                'Feature Std': feature_std,
+                'Feature Norm': feature_norm
+            })
+
+        # 创建DataFrame
+        df = pd.DataFrame(metrics_list)
+        save_path = os.path.join(save_dir, 'regression_metrics.csv')
+        df.to_csv(save_path, index=False)
+        print(f"\n✅ 回归指标已保存: {save_path}")
+        print("\n" + df.to_string(index=False))
+
+        # 可视化回归指标
+        self._plot_regression_metrics(df, save_dir)
+
+        return df
+
+    def _plot_regression_metrics(self, df, save_dir):
+        """可视化回归指标对比"""
+        metrics = ['Avg Pearson Corr', 'Max Pearson Corr',
+                   'Avg Spearman Corr', 'Feature Variance']
+
+        fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+        axes = axes.flatten()
+
+        for idx, metric in enumerate(metrics):
+            ax = axes[idx]
+            data = df[['Feature', metric]].dropna()
+
+            if len(data) == 0:
+                continue
+
+            x = range(len(data))
+            y = data[metric].values
+            labels = data['Feature'].values
+
+            # 使用颜色区分性能
+            colors = sns.color_palette("RdYlGn", len(data))
+            if metric in ['Avg Pearson Corr', 'Max Pearson Corr', 'Avg Spearman Corr']:
+                # 相关性越高越好，排序后上色
+                sorted_indices = np.argsort(y)
+                bar_colors = [colors[np.where(sorted_indices == i)[0][0]] for i in range(len(y))]
+            else:
+                bar_colors = sns.color_palette("husl", len(data))
+
+            bars = ax.bar(x, y, alpha=0.7, color=bar_colors)
+            ax.set_xticks(x)
+            ax.set_xticklabels(labels, rotation=45, ha='right')
+            ax.set_ylabel(metric)
+            ax.set_title(f'{metric} Comparison', fontweight='bold')
+            ax.grid(axis='y', alpha=0.3, color='white', linewidth=0.8)
+
+            # 标注数值
+            for i, v in enumerate(y):
+                ax.text(i, v + 0.01*max(abs(y)), f'{v:.4f}',
+                       ha='center', va='bottom', fontsize=9)
+
+            # 添加参考线
+            if metric in ['Avg Pearson Corr', 'Max Pearson Corr', 'Avg Spearman Corr']:
+                ax.axhline(y=0.3, color='orange', linestyle='--',
+                          linewidth=1, alpha=0.5, label='Moderate (0.3)')
+                ax.axhline(y=0.5, color='red', linestyle='--',
+                          linewidth=1, alpha=0.5, label='Strong (0.5)')
+                ax.legend(fontsize=8)
+
+        plt.tight_layout()
+        save_path = os.path.join(save_dir, 'regression_metrics_comparison.png')
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"✅ 回归指标对比图已保存: {save_path}")
+        plt.close()
+
 
 def main():
     parser = argparse.ArgumentParser(description='对比不同融合机制的效果 (v2)')
@@ -521,8 +645,11 @@ def main():
     # 可视化
     comparator.visualize_tsne(features_dict, targets, args.save_dir)
 
-    # 计算指标
+    # 计算聚类指标
     metrics_df = comparator.compute_metrics(features_dict, targets, args.save_dir)
+
+    # 计算回归指标
+    regression_metrics_df = comparator.compute_regression_metrics(features_dict, targets, args.save_dir)
 
     print(f"\n🎉 分析完成! 结果保存在: {args.save_dir}")
 
