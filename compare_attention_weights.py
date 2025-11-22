@@ -50,10 +50,39 @@ class AttentionComparator:
         """加载模型"""
         checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
 
+        # 打印 checkpoint 的键，方便调试
+        print(f"    Checkpoint keys: {list(checkpoint.keys())}")
+
+        # 获取配置
+        if 'config' in checkpoint:
+            config = checkpoint['config']
+        elif 'model_config' in checkpoint:
+            config = checkpoint['model_config']
+        else:
+            raise KeyError(f"Cannot find config in checkpoint. Available keys: {list(checkpoint.keys())}")
+
         # 重建模型
-        config = checkpoint['config']
         model = ALIGNN(config)
-        model.load_state_dict(checkpoint['model_state_dict'])
+
+        # 尝试多种可能的状态字典键名
+        state_dict = None
+        possible_keys = ['model_state_dict', 'state_dict', 'model', 'model_state']
+
+        for key in possible_keys:
+            if key in checkpoint:
+                state_dict = checkpoint[key]
+                print(f"    Found state dict with key: '{key}'")
+                break
+
+        if state_dict is None:
+            # 如果都没找到，尝试直接使用 checkpoint（可能整个文件就是 state_dict）
+            if all(isinstance(k, str) and not k.startswith('_') for k in checkpoint.keys()):
+                state_dict = checkpoint
+                print(f"    Using entire checkpoint as state dict")
+            else:
+                raise KeyError(f"Cannot find model state dict. Available keys: {list(checkpoint.keys())}")
+
+        model.load_state_dict(state_dict)
         model.to(self.device)
         model.eval()
 
