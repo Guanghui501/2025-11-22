@@ -991,13 +991,23 @@ class ALIGNN(nn.Module):
         # Multi-Modal Representation Fusion
         attention_weights = None
         if self.use_cross_modal_attention:
+            # Use enhanced text features for cross-modal attention if available
+            # This leverages the high-quality text_fine features from fine-grained attention
+            if self.use_fine_grained_attention and enhanced_tokens is not None:
+                # Use text_fine (enhanced by fine-grained attention) instead of text_base
+                text_for_cross_attention = enhanced_tokens[:, 0, :]  # CLS token after fine-grained attention
+                text_for_cross_attention = self.text_projection(text_for_cross_attention)
+            else:
+                # Fall back to base text features if fine-grained attention is not used
+                text_for_cross_attention = text_emb
+
             # Cross-modal attention fusion
             if return_attention:
                 enhanced_graph, enhanced_text, attention_weights = self.cross_modal_attention(
-                    h, text_emb, return_attention=True
+                    h, text_for_cross_attention, return_attention=True
                 )
             else:
-                enhanced_graph, enhanced_text = self.cross_modal_attention(h, text_emb)
+                enhanced_graph, enhanced_text = self.cross_modal_attention(h, text_for_cross_attention)
 
             # Average fusion of enhanced features
             h = (enhanced_graph + enhanced_text) / 2  # [batch, 64]
