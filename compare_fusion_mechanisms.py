@@ -366,11 +366,12 @@ class FusionComparator:
 def main():
     parser = argparse.ArgumentParser(description='对比不同融合机制的效果 (v2)')
     parser.add_argument('--checkpoint', type=str, required=True, help='模型checkpoint路径')
-    parser.add_argument('--dataset', type=str, default='dft_3d',
-                        choices=['dft_3d', 'dft_2d', 'megnet', 'cfid_3d', 'qm9_std_jctc'],
-                        help='JARVIS数据集名称 (默认: dft_3d)')
-    parser.add_argument('--property', type=str, default='formation_energy_peratom',
-                        help='目标属性')
+    parser.add_argument('--dataset', type=str, required=True,
+                        help='数据集类型 (jarvis/mp/class等)')
+    parser.add_argument('--property', type=str, required=True,
+                        help='目标属性 (如 formation_energy_peratom, bandgap等)')
+    parser.add_argument('--root_dir', type=str, default='./dataset',
+                        help='数据集根目录')
     parser.add_argument('--batch_size', type=int, default=32, help='批次大小')
     parser.add_argument('--max_samples', type=int, default=500, help='最大样本数（用于快速测试）')
     parser.add_argument('--save_dir', type=str, default='./fusion_comparison',
@@ -404,18 +405,58 @@ def main():
     print(f"     - 细粒度注意力: {model.use_fine_grained_attention}")
     print(f"     - 全局注意力: {model.use_cross_modal_attention}")
 
-    # 加载数据
+    # 加载数据集（支持本地数据）
     print(f"\n🔄 加载数据集: {args.dataset} - {args.property}")
-    train_loader, val_loader, test_loader = get_train_val_loaders(
-        dataset=args.dataset,
-        target=args.property,
-        n_train=None,
-        n_val=None,
-        n_test=None,
-        batch_size=args.batch_size,
-        workers=0,
-        output_dir=args.save_dir
-    )
+    try:
+        from train_with_cross_modal_attention import load_dataset, get_dataset_paths
+
+        # 获取数据集路径
+        cif_dir, id_prop_file = get_dataset_paths(args.root_dir, args.dataset, args.property)
+
+        # 加载数据集
+        df = load_dataset(cif_dir, id_prop_file, args.dataset, args.property)
+        print(f"✅ 加载数据集: {len(df)} 样本")
+
+        # 如果设置了max_samples，进行采样
+        if args.max_samples and len(df) > args.max_samples:
+            print(f"⚠️  数据集过大，随机采样 {args.max_samples} 样本")
+            import random
+            random.seed(42)
+            df = random.sample(df, args.max_samples)
+
+        # 创建数据加载器（使用本地数据）
+        train_loader, val_loader, test_loader, _ = get_train_val_loaders(
+            dataset='user_data',  # 使用user_data避免dataset限制
+            dataset_array=df,
+            target='target',
+            n_train=None,
+            n_val=None,
+            n_test=None,
+            train_ratio=0.8,
+            val_ratio=0.1,
+            test_ratio=0.1,
+            batch_size=args.batch_size,
+            atom_features=config.atom_features if hasattr(config, 'atom_features') else 'cgcnn',
+            neighbor_strategy='k-nearest',
+            line_graph=config.line_graph if hasattr(config, 'line_graph') else True,
+            split_seed=42,
+            workers=0,
+            pin_memory=False,
+            save_dataloader=False,
+            filename='temp_comparison',
+            id_tag='jid',
+            use_canonize=True,
+            cutoff=8.0,
+            max_neighbors=12,
+            output_dir=args.save_dir
+        )
+    except Exception as e:
+        print(f"❌ 加载数据集失败: {e}")
+        print("请确保:")
+        print(f"  1. 数据集路径正确: {args.root_dir}")
+        print(f"  2. 数据集类型正确: {args.dataset}")
+        print(f"  3. 属性名称正确: {args.property}")
+        raise
 
     print(f"   测试集样本数: {len(test_loader.dataset)}")
 
