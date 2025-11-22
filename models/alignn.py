@@ -913,6 +913,13 @@ class ALIGNN(nn.Module):
         for gcn_layer in self.gcn_layers:
             x, y = gcn_layer(g, x, y)
 
+        # Save BASE graph features BEFORE any attention (for ablation studies)
+        # This must be done before fine-grained attention modifies x
+        graph_emb_base = None
+        if return_intermediate_features:
+            temp_graph_emb = self.readout(g, x)
+            graph_emb_base = self.graph_projection(temp_graph_emb).clone()
+
         # Fine-grained cross-modal attention (before readout)
         fine_grained_attention_weights = None
         if self.use_fine_grained_attention:
@@ -978,9 +985,8 @@ class ALIGNN(nn.Module):
         # norm-activation-pool-classify
         graph_emb = self.readout(g, x)
         h = self.graph_projection(graph_emb)
-
-        # Store base graph features for ablation studies
-        graph_emb_base = h.clone() if return_intermediate_features else None
+        # Note: graph_emb_base was already saved earlier (before fine-grained attention)
+        # to ensure it captures true "base" features without any attention applied
 
         # Multi-Modal Representation Fusion
         attention_weights = None
