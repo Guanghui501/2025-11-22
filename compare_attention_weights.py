@@ -137,13 +137,22 @@ class AttentionComparator:
                 output_no_middle = self.model_no_middle(model_input, return_attention=True)
 
                 # 保存注意力权重
-                # 细粒度注意力
+                # 细粒度注意力 (fine_grained_attention_weights 是一个字典)
                 if 'fine_grained_attention_weights' in output_full:
+                    # 使用 atom_to_text 注意力: [batch, heads, num_atoms, seq_len]
+                    # 这显示每个原子关注哪些文本token
+                    attn_full = output_full['fine_grained_attention_weights']['atom_to_text']
+                    attn_no_middle = output_no_middle['fine_grained_attention_weights']['atom_to_text']
+
+                    # 对多头注意力取平均: [batch, heads, num_atoms, seq_len] -> [batch, num_atoms, seq_len]
+                    attn_full = attn_full.mean(dim=1)  # 平均所有注意力头
+                    attn_no_middle = attn_no_middle.mean(dim=1)
+
                     results['full_model']['fine_grained'].append(
-                        output_full['fine_grained_attention_weights'].cpu().numpy()
+                        attn_full.cpu().numpy()
                     )
                     results['no_middle_model']['fine_grained'].append(
-                        output_no_middle['fine_grained_attention_weights'].cpu().numpy()
+                        attn_no_middle.cpu().numpy()
                     )
 
                 # 全局注意力 (cross-modal attention)
