@@ -15,6 +15,10 @@ import pandas as pd
 from tqdm import tqdm
 import argparse
 
+# 配置matplotlib
+plt.rcParams['font.size'] = 10
+plt.rcParams['axes.unicode_minus'] = False  # 正常显示负号
+
 # 添加路径
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
@@ -246,22 +250,23 @@ class AttentionComparator:
             )
 
             # 绘制对比图
-            fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-            fig.suptitle('细粒度注意力权重对比：全模态 vs 无中期融合', fontsize=14, weight='bold')
+            fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+            fig.suptitle('Fine-grained Attention Weight Comparison: Full Model vs No-Middle-Fusion',
+                        fontsize=14, weight='bold')
 
             metrics = ['entropy', 'max_weight', 'effective_tokens', 'gini']
             titles = [
-                '注意力熵（越低越集中）',
-                '最大注意力权重（越高越明确）',
-                '有效Token数（越少越选择性）',
-                '基尼系数（越高越不平等）'
+                'Attention Entropy (Lower = More Focused)',
+                'Maximum Attention Weight (Higher = Stronger)',
+                'Effective Tokens Count (Fewer = More Selective)',
+                'Gini Coefficient (Higher = More Concentrated)'
             ]
 
             for idx, (metric, title) in enumerate(zip(metrics, titles)):
                 ax = axes[idx // 2, idx % 2]
 
                 values = [stats_full[metric], stats_no_middle[metric]]
-                labels = ['全模态\n(有中期融合)', '无中期融合']
+                labels = ['Full Model\n(w/ Middle Fusion)', 'No Middle\nFusion']
                 colors = ['#2ecc71', '#e74c3c']
 
                 bars = ax.bar(labels, values, color=colors, alpha=0.7, edgecolor='black')
@@ -279,7 +284,7 @@ class AttentionComparator:
                 # 添加改善百分比
                 if stats_full[metric] != 0:
                     improvement = (stats_full[metric] - stats_no_middle[metric]) / abs(stats_no_middle[metric]) * 100
-                    ax.text(0.5, 0.95, f'改善: {improvement:+.1f}%',
+                    ax.text(0.5, 0.95, f'Change: {improvement:+.1f}%',
                            transform=ax.transAxes,
                            ha='center', va='top',
                            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
@@ -328,21 +333,22 @@ class AttentionComparator:
             attn_no_middle = fine_grained_no_middle[idx][0]
 
             fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-            fig.suptitle(f'示例 {idx+1}: 节点-Token 注意力热图对比', fontsize=14, weight='bold')
+            fig.suptitle(f'Example {idx+1}: Atom-Token Attention Heatmap Comparison',
+                        fontsize=14, weight='bold')
 
             # 全模态
             sns.heatmap(attn_full, cmap='YlOrRd', ax=axes[0],
                        cbar_kws={'label': 'Attention Weight'})
-            axes[0].set_title('全模态（有中期融合）', fontsize=12)
+            axes[0].set_title('Full Model (w/ Middle Fusion)', fontsize=12)
             axes[0].set_xlabel('Text Tokens', fontsize=11)
-            axes[0].set_ylabel('Graph Nodes', fontsize=11)
+            axes[0].set_ylabel('Graph Nodes (Atoms)', fontsize=11)
 
             # 无中期
             sns.heatmap(attn_no_middle, cmap='YlOrRd', ax=axes[1],
                        cbar_kws={'label': 'Attention Weight'})
-            axes[1].set_title('无中期融合', fontsize=12)
+            axes[1].set_title('No Middle Fusion', fontsize=12)
             axes[1].set_xlabel('Text Tokens', fontsize=11)
-            axes[1].set_ylabel('Graph Nodes', fontsize=11)
+            axes[1].set_ylabel('Graph Nodes (Atoms)', fontsize=11)
 
             plt.tight_layout()
             plt.savefig(f'{save_dir}/attention_heatmap_example_{idx+1}.png', dpi=300, bbox_inches='tight')
