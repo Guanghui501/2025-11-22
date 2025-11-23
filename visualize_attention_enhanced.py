@@ -255,21 +255,45 @@ def main():
     print("\n加载模型...")
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    checkpoint_full = torch.load(args.checkpoint_full, map_location=device, weights_only=False)
-    config_full = checkpoint_full.get('config') or checkpoint_full.get('model_config')
-    model_full = ALIGNN(config_full)
-    state_dict_full = checkpoint_full.get('model_state_dict') or checkpoint_full.get('state_dict')
-    model_full.load_state_dict(state_dict_full)
-    model_full.to(device)
-    model_full.eval()
+    def load_model(checkpoint_path, device):
+        """灵活加载模型checkpoint"""
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
 
-    checkpoint_no_middle = torch.load(args.checkpoint_no_middle, map_location=device, weights_only=False)
-    config_no_middle = checkpoint_no_middle.get('config') or checkpoint_no_middle.get('model_config')
-    model_no_middle = ALIGNN(config_no_middle)
-    state_dict_no_middle = checkpoint_no_middle.get('model_state_dict') or checkpoint_no_middle.get('state_dict')
-    model_no_middle.load_state_dict(state_dict_no_middle)
-    model_no_middle.to(device)
-    model_no_middle.eval()
+        # 尝试获取config
+        config = None
+        for key in ['config', 'model_config']:
+            if key in checkpoint:
+                config = checkpoint[key]
+                break
+
+        if config is None:
+            raise ValueError(f"Cannot find config in checkpoint {checkpoint_path}")
+
+        # 创建模型
+        model = ALIGNN(config)
+
+        # 尝试获取state_dict
+        state_dict = None
+        for key in ['model_state_dict', 'state_dict', 'model', 'model_state']:
+            if key in checkpoint:
+                state_dict = checkpoint[key]
+                break
+
+        if state_dict is None:
+            raise ValueError(f"Cannot find state_dict in checkpoint {checkpoint_path}")
+
+        # 加载权重
+        model.load_state_dict(state_dict)
+        model.to(device)
+        model.eval()
+
+        return model
+
+    print("  加载全模态模型...")
+    model_full = load_model(args.checkpoint_full, device)
+
+    print("  加载无中期融合模型...")
+    model_no_middle = load_model(args.checkpoint_no_middle, device)
 
     # 提取并可视化
     print(f"\n提取并可视化前 {args.num_examples} 个样本的注意力权重...")
